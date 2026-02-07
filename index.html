@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Babel Standalone for on-the-fly TSX transpilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -18,7 +21,6 @@
     .mono {
       font-family: 'JetBrains Mono', monospace;
     }
-    /* Simple custom scrollbar */
     ::-webkit-scrollbar {
       width: 8px;
     }
@@ -33,6 +35,7 @@
       background: #555;
     }
   </style>
+
   <script type="importmap">
 {
   "imports": {
@@ -48,7 +51,17 @@
 </head>
 <body class="bg-slate-50 text-slate-900">
   <div id="root"></div>
-  <!-- Explicitly load the entry point to ensure the app initializes correctly on static hosts -->
-  <script type="module" src="./index.tsx"></script>
+  
+  <!-- 
+    The script must be type="text/babel" to allow Babel Standalone to transpile the TSX.
+    data-type="module" ensures it behaves as an ES module.
+    data-presets="react,typescript" tells Babel how to handle the code.
+  -->
+  <script 
+    type="text/babel" 
+    data-type="module" 
+    data-presets="react,typescript" 
+    src="./index.tsx"
+  ></script>
 </body>
 </html>
