@@ -1,31 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
-// Import shared types from the corrected types.ts module
-import { 
-  ProcessingStatus, 
-  EvaluationReport, 
-  QuestionFeedback, 
-  ScoreVerification, 
-  AIObservation, 
-  ActionSummary 
-} from './types';
+
+// --- TYPES & INTERFACES ---
+
+enum ProcessingStatus {
+  IDLE = 'IDLE',
+  ANALYZING = 'ANALYZING',
+  COMPLETED = 'COMPLETED',
+  ERROR = 'ERROR'
+}
+
+interface QuestionFeedback {
+  questionNo: string;
+  maxMarks: string | number;
+  marksAwarded: string | number;
+  keyAnswerPoints: string;
+  studentAnswerSummary: string;
+  humanFeedback: string;
+  aiFeedbackAddition: string;
+}
+
+interface ScoreVerification {
+  calculatedTotal: number;
+  reportedTotal: number;
+  status: 'Correct' | 'Incorrect';
+  discrepancyExplanation?: string;
+}
+
+interface AIObservation {
+  section: string;
+  observation: string;
+}
+
+interface EvaluationReport {
+  examReference: string;
+  evaluationType: string;
+  aiModelRole: string;
+  generalisedFeedback: string;
+  questionWiseFeedback: QuestionFeedback[];
+  scoreVerification: ScoreVerification;
+  finalizedFeedback: AIObservation[];
+}
 
 // --- SERVICES ---
 
 const PROMPT_INSTRUCTION = `
 You are an AI academic evaluation assistant for medical anatomy education.
-Your role is to provide structured, concise, grounded, and audit-safe feedback that SUPPLEMENTS human evaluator feedback.
+Your role is to supplement human evaluator feedback with grounded anatomical analysis.
 
 INPUTS PROVIDED:
 1. Merged PDF Content: Question paper, Official answer key, and Student handwritten answer sheet (OCR).
-2. Human Feedback PDF Content: Marks awarded, human comments, and reported total score.
+2. Human Feedback PDF Content: Marks awarded by the teacher, human comments per question, and the reported total score.
 
 TASK OBJECTIVES:
-A. Alignment Analysis: Compare student OCR with official key. Identify anatomical omissions or errors.
-B. Feedback Augmentation: Create a ONE LINE "AI Feedback Addition" per question clarifying missing anatomical details from the marking scheme.
-C. Generalised Synthesis: Professional academic summary of student's overall performance.
-D. Verification: Recalculate total marks from individual question scores and compare with the reported total in the human feedback.
+A. Data Extraction: Carefully extract the marks and comments already provided by the human evaluator from the "Human Feedback PDF".
+B. Alignment Analysis: Analyze the Student's answer sheet against the Official Answer Key and Question Paper.
+C. Feedback Enhancement: 
+   - Retain the Human Evaluator's original marks and feedback.
+   - ADD a ONE LINE "AI Feedback Addition" which provides a concise, high-value anatomical suggestion or clarification (e.g., "Missing clear labeling of the celiac trunk branches," or "Excellent depiction of the inguinal canal boundaries").
+D. Generalised Synthesis: Take the human's overall summary/comments from the Feedback PDF and ELABORATE it into a formal, structured academic synthesis (3-5 sentences).
+E. Verification: Recalculate total marks from the individual extracted human scores and compare with the reported total.
 
 OUTPUT FORMAT: Generate a valid JSON object matching the defined schema.
 `;
@@ -34,17 +69,15 @@ async function generateEvaluationReport(
   mergedFile: { name: string; data: string; mimeType: string },
   feedbackFile: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  // Always initialize GoogleGenAI with the required named parameter and the API key from environment
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // Use the recommended gemini-3-pro-preview model for complex text/reasoning tasks
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: [
       {
         parts: [
           { text: PROMPT_INSTRUCTION },
-          { text: `Reference Files Provided: ${mergedFile.name}, ${feedbackFile.name}` },
+          { text: `Primary Files: ${mergedFile.name}. Evaluator Feedback: ${feedbackFile.name}.` },
           { inlineData: { data: mergedFile.data, mimeType: 'application/pdf' } },
           { inlineData: { data: feedbackFile.data, mimeType: 'application/pdf' } }
         ]
@@ -95,28 +128,14 @@ async function generateEvaluationReport(
               },
               required: ["section", "observation"]
             }
-          },
-          actionSummary: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                task: { type: Type.STRING },
-                status: { type: Type.STRING },
-                evidence: { type: Type.STRING }
-              },
-              required: ["task", "status", "evidence"]
-            }
           }
         },
-        required: ["examReference", "evaluationType", "aiModelRole", "generalisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback", "actionSummary"]
+        required: ["examReference", "evaluationType", "aiModelRole", "generalisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback"]
       },
-      // Using thinkingConfig for deep medical reasoning with gemini-3-pro-preview
       thinkingConfig: { thinkingBudget: 32768 }
     }
   });
 
-  // Extract the text output from the GenerateContentResponse object directly via the .text property
   const responseText = response.text;
   if (!responseText) throw new Error("The AI model failed to generate a response.");
   return JSON.parse(responseText.trim()) as EvaluationReport;
@@ -157,17 +176,16 @@ const FileUpload: React.FC<{
 );
 
 const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
-  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-8 duration-700">
     {/* Hero Banner */}
     <div className="bg-indigo-950 text-white rounded-[2rem] p-12 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
       <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-500/10 rounded-full -mr-[20rem] -mt-[20rem] blur-[100px]"></div>
       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-8">
         <div className="space-y-4">
-          <div className="inline-flex items-center px-4 py-1.5 bg-indigo-800/50 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 border border-indigo-700/50">Verification Protocol Activated</div>
+          <div className="inline-flex items-center px-4 py-1.5 bg-indigo-800/50 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 border border-indigo-700/50">Enhanced Audit Complete</div>
           <h2 className="text-5xl font-black tracking-tighter leading-none">{report.examReference}</h2>
           <div className="flex flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-widest opacity-60">
             <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>{report.evaluationType}</span>
-            <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>{report.aiModelRole}</span>
           </div>
         </div>
         <div className="text-right">
@@ -180,15 +198,15 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </div>
 
-    {/* Summary Card */}
+    {/* Elaborated Generalized Feedback Card */}
     <section className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden group">
-      <div className="bg-slate-50/50 border-b border-slate-100 px-10 py-6 flex items-center justify-between">
-        <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em] flex items-center">
-          <div className="w-8 h-8 rounded-lg bg-indigo-900 text-white flex items-center justify-center mr-4 shadow-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-          Executive Academic Synthesis
+      <div className="bg-indigo-900 px-10 py-6 flex items-center justify-between">
+        <h3 className="text-xs font-black text-white uppercase tracking-[0.3em] flex items-center">
+          <svg className="w-5 h-5 mr-3 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          ELABORATED ACADEMIC SYNTHESIS
         </h3>
       </div>
-      <div className="p-12 leading-[1.8] text-slate-700 text-xl font-medium italic border-l-[6px] border-indigo-900 bg-slate-50/30 m-10 rounded-2xl shadow-inner group-hover:bg-slate-50 transition-colors">
+      <div className="p-12 leading-[1.8] text-slate-700 text-xl font-medium italic border-l-[6px] border-indigo-900 bg-slate-50/50 m-8 rounded-2xl shadow-inner group-hover:bg-slate-50 transition-colors">
         "{report.generalisedFeedback}"
       </div>
     </section>
@@ -197,38 +215,36 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
     <section className="space-y-8">
       <div className="flex items-center justify-between px-2">
         <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
-          Detailed Alignment Audit
-          <span className="ml-4 px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-200">Question Wise</span>
+          Question-Wise Alignment Audit
+          <span className="ml-4 px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-200">AI Enhanced</span>
         </h3>
       </div>
-      <div className="overflow-x-auto rounded-[2.5rem] border border-slate-200 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] bg-white">
-        <table className="w-full text-left border-collapse min-w-[1300px]">
+      <div className="overflow-x-auto rounded-[2.5rem] border border-slate-200 shadow-2xl bg-white">
+        <table className="w-full text-left border-collapse min-w-[1400px]">
           <thead>
-            <tr className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-200">
-              <th className="p-8 w-24 text-center">Reference</th>
-              <th className="p-8 w-36 text-center">Score Delta</th>
-              <th className="p-8">Required Criteria (Key)</th>
-              <th className="p-8">Student Contribution (OCR)</th>
-              <th className="p-8 bg-indigo-50/30 text-indigo-950 border-l-4 border-indigo-900">AI Augmented Insight</th>
+            <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black border-b border-slate-200">
+              <th className="p-8 w-24 text-center">Ref</th>
+              <th className="p-8 w-32 text-center">Marks</th>
+              <th className="p-8 w-64">Human Evaluator Feedback</th>
+              <th className="p-8 w-72">Student Answer (OCR)</th>
+              <th className="p-8 bg-indigo-50/50 text-indigo-950 border-l-4 border-indigo-900">AI Supplemental Suggestion</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {report.questionWiseFeedback.map((q, idx) => (
-              <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-300 group">
-                <td className="p-8 font-black text-slate-400 text-center text-lg group-hover:text-indigo-900 group-hover:scale-110 transition-transform">#{q.questionNo}</td>
+              <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-300">
+                <td className="p-8 font-black text-slate-400 text-center text-lg">{q.questionNo}</td>
                 <td className="p-8 text-center">
-                  <div className="inline-flex flex-col">
-                    <span className="text-xl font-black text-slate-900 tabular-nums">{q.marksAwarded}</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">OF {q.maxMarks}</span>
-                  </div>
+                  <span className="inline-flex flex-col">
+                    <span className="text-xl font-black text-slate-900">{q.marksAwarded}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">/ {q.maxMarks}</span>
+                  </span>
                 </td>
-                <td className="p-8 text-sm text-slate-500 italic max-w-xs leading-relaxed font-medium">{q.keyAnswerPoints}</td>
-                <td className="p-8 text-sm text-slate-700 leading-relaxed max-w-sm font-semibold">{q.studentAnswerSummary}</td>
-                <td className="p-8 bg-indigo-50/10 font-bold text-indigo-950 border-l-4 border-indigo-900/40 group-hover:border-indigo-900 leading-relaxed text-sm">
+                <td className="p-8 text-sm text-slate-600 font-semibold leading-relaxed">{q.humanFeedback}</td>
+                <td className="p-8 text-sm text-slate-500 italic leading-relaxed">{q.studentAnswerSummary}</td>
+                <td className="p-8 bg-indigo-50/20 font-bold text-indigo-900 border-l-4 border-indigo-900 leading-relaxed text-sm">
                   <div className="flex items-start">
-                    <div className="w-6 h-6 rounded-md bg-indigo-900 text-white flex items-center justify-center mr-4 flex-shrink-0 mt-0.5 shadow-md">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
-                    </div>
+                    <svg className="w-5 h-5 mr-3 mt-0.5 text-indigo-900 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
                     {q.aiFeedbackAddition}
                   </div>
                 </td>
@@ -239,44 +255,43 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Verification Blocks */}
+    {/* Audit Blocks */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
       <section className="bg-white rounded-[2rem] border border-slate-200 shadow-xl p-12">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-10">Integrity Matrix</h3>
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-10">Score Integrity</h3>
         <div className="space-y-8">
           <div className="flex items-center justify-between pb-6 border-b border-slate-100">
-            <span className="text-slate-500 font-bold text-sm uppercase tracking-widest">Calculated AI Sum</span>
-            <span className="font-black text-4xl tabular-nums tracking-tighter">{report.scoreVerification.calculatedTotal}</span>
+            <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Calculated Sum</span>
+            <span className="font-black text-4xl tabular-nums">{report.scoreVerification.calculatedTotal}</span>
           </div>
           <div className="flex items-center justify-between pb-6 border-b border-slate-100">
-            <span className="text-slate-500 font-bold text-sm uppercase tracking-widest">Human Reported Total</span>
-            <span className="font-black text-4xl tabular-nums tracking-tighter">{report.scoreVerification.reportedTotal}</span>
+            <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Reported Total</span>
+            <span className="font-black text-4xl tabular-nums">{report.scoreVerification.reportedTotal}</span>
           </div>
-          <div className={`mt-8 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center border-2 shadow-sm ${report.scoreVerification.status === 'Correct' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-800 border-rose-100'}`}>
-             <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d={report.scoreVerification.status === 'Correct' ? "M5 13l4 4L19 7" : "M6 18L18 6M6 6l12 12"} /></svg>
-             Verification Status: {report.scoreVerification.status}
+          <div className={`mt-8 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center border-2 ${report.scoreVerification.status === 'Correct' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-800 border-rose-100'}`}>
+             Status: {report.scoreVerification.status}
           </div>
         </div>
       </section>
 
       <section className="bg-slate-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between">
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full -ml-32 -mb-32 blur-[80px]"></div>
+        <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full -ml-32 -mt-32 blur-[80px]"></div>
         <div className="relative z-10">
-          <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.5em] mb-10">AI Pattern Observations</h4>
+          <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.5em] mb-10">AI Critical Patterns</h4>
           <div className="space-y-8">
-            {report.finalizedFeedback.slice(0, 3).map((obs, i) => (
-              <div key={i} className="flex space-x-6 group/obs">
-                <span className="text-indigo-500 font-black text-xl opacity-20 group-hover/obs:opacity-100 transition-opacity">0{i+1}</span>
+            {report.finalizedFeedback.map((obs, i) => (
+              <div key={i} className="flex space-x-6">
+                <span className="text-indigo-500 font-black text-xl opacity-30">0{i+1}</span>
                 <div>
                   <h5 className="font-black text-[10px] text-indigo-300 uppercase tracking-widest mb-2">{obs.section}</h5>
-                  <p className="text-base text-slate-400 leading-relaxed font-medium group-hover/obs:text-slate-200 transition-colors">{obs.observation}</p>
+                  <p className="text-base text-slate-400 leading-relaxed font-medium">{obs.observation}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="mt-12 relative z-10">
-          <button onClick={() => window.print()} className="w-full px-8 py-4 bg-indigo-700 hover:bg-indigo-600 rounded-2xl text-xs font-black uppercase tracking-[0.3em] transition-all shadow-xl hover:shadow-indigo-500/20 active:scale-[0.98]">Commit to Official Records</button>
+        <div className="mt-12">
+          <button onClick={() => window.print()} className="w-full px-8 py-4 bg-indigo-700 hover:bg-indigo-600 rounded-2xl text-xs font-black uppercase tracking-[0.3em] transition-all shadow-xl active:scale-[0.98]">Export Audit Report</button>
         </div>
       </section>
     </div>
@@ -293,17 +308,20 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Robust loader removal to prevent "Initialising AnatomyGuard" hang
     const loader = document.getElementById('loader');
     if (loader) {
       setTimeout(() => {
         loader.style.opacity = '0';
-        setTimeout(() => loader.remove(), 500);
+        setTimeout(() => {
+          if (loader.parentNode) loader.remove();
+        }, 500);
       }, 500);
     }
   }, []);
 
   const handleProcess = async () => {
-    if (!mergedFile || !feedbackFile) return setError("System requires both Artifact Reference and Evaluator Feedback PDFs.");
+    if (!mergedFile || !feedbackFile) return setError("Analysis requires both Primary Reference and Human Feedback PDFs.");
 
     setStatus(ProcessingStatus.ANALYZING);
     setError(null);
@@ -321,7 +339,7 @@ const App: React.FC = () => {
       setStatus(ProcessingStatus.COMPLETED);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || "Extraction Protocol Failure. Ensure PDF integrity.");
+      setError(e.message || "Extraction Protocol Failure. Please check your PDF files.");
       setStatus(ProcessingStatus.ERROR);
     }
   };
@@ -335,18 +353,18 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-8 h-24 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-5">
-          <div className="w-14 h-14 bg-indigo-900 rounded-[1.25rem] flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-900/20 rotate-3">🛡️</div>
+          <div className="w-14 h-14 bg-indigo-900 rounded-[1.25rem] flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-900/20">🛡️</div>
           <div>
             <h1 className="text-2xl font-black tracking-tighter leading-none">AnatomyGuard</h1>
-            <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.4em] mt-2">Evaluation Verification Core</p>
+            <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.4em] mt-2">Enhanced Audit Protocol</p>
           </div>
         </div>
         {report && (
           <button onClick={reset} className="px-8 py-3 bg-slate-100 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-900 hover:text-white transition-all shadow-sm">
-            Recalibrate Audit
+            Recalibrate
           </button>
         )}
       </nav>
@@ -355,26 +373,18 @@ const App: React.FC = () => {
         {!report || status === ProcessingStatus.ANALYZING ? (
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-16 space-y-4">
-               <h2 className="text-5xl font-black text-slate-900 tracking-tighter">Academic Verification Portal</h2>
-               <p className="text-slate-500 font-bold text-lg max-w-lg mx-auto leading-relaxed">Cross-analyze handwritten scripts against marking keys and human evaluator feedback.</p>
+               <h2 className="text-5xl font-black text-slate-900 tracking-tighter">Academic Verification</h2>
+               <p className="text-slate-500 font-bold text-lg max-w-lg mx-auto leading-relaxed">AI-driven cross-analysis of student answer sheets and human evaluator feedback.</p>
             </div>
 
-            <div className="bg-white rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden">
-              <div className="bg-slate-50/50 px-12 py-10 border-b border-slate-100 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-slate-800 tracking-tight">Artifact Intake</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Multi-Document Analysis Enabled</p>
-                </div>
-                <div className="flex space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]"></div>
-                  <div className="w-3 h-3 rounded-full bg-slate-200"></div>
-                  <div className="w-3 h-3 rounded-full bg-slate-200"></div>
-                </div>
+            <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+              <div className="bg-slate-50/50 px-12 py-10 border-b border-slate-100">
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">System Intake</h3>
               </div>
               <div className="p-12 space-y-12">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                  <FileUpload id="m" label="Ref Reference" description="Question + Answer Key + Student Work" onChange={setMergedFile} fileName={mergedFile?.name || null} />
-                  <FileUpload id="f" label="Human Audit" description="Teacher's Scored Sheets + Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
+                  <FileUpload id="m" label="Artifact Repository" description="Question + Key + Student Script" onChange={setMergedFile} fileName={mergedFile?.name || null} />
+                  <FileUpload id="f" label="Evaluator Feedback" description="Human Marks + Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
                 </div>
 
                 {error && (
@@ -387,24 +397,24 @@ const App: React.FC = () => {
                 <button 
                   onClick={handleProcess} 
                   disabled={status === ProcessingStatus.ANALYZING || !mergedFile || !feedbackFile} 
-                  className="w-full py-6 bg-indigo-900 text-white rounded-[1.75rem] font-black text-xl shadow-[0_20px_40px_-10px_rgba(49,46,129,0.3)] hover:bg-indigo-950 disabled:opacity-50 transition-all active:scale-[0.97] flex items-center justify-center space-x-5 hover:-translate-y-1"
+                  className="w-full py-6 bg-indigo-900 text-white rounded-[1.75rem] font-black text-xl shadow-xl hover:bg-indigo-950 disabled:opacity-50 transition-all active:scale-[0.97] flex items-center justify-center space-x-5"
                 >
                   {status === ProcessingStatus.ANALYZING ? (
                     <>
                       <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-                      <span className="tracking-tight uppercase text-base">Running Verification Protocol...</span>
+                      <span className="tracking-tight uppercase text-base font-bold">Processing Medical Audit...</span>
                     </>
                   ) : (
                     <>
-                      <span className="tracking-tight uppercase text-base">Initiate AI Audit Analysis</span>
+                      <span className="tracking-tight uppercase text-base font-bold">Initiate Audit Analysis</span>
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                     </>
                   )}
                 </button>
               </div>
               {status === ProcessingStatus.ANALYZING && (
-                <div className="h-1.5 bg-slate-100 relative overflow-hidden">
-                  <div className="h-full bg-indigo-600 animate-[progress_1.5s_ease-in-out_infinite] w-[40%] absolute top-0 left-0 shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
+                <div className="h-2 bg-slate-100 relative overflow-hidden">
+                  <div className="h-full bg-indigo-600 animate-[progress_1.5s_ease-in-out_infinite] w-[40%] absolute top-0 left-0 shadow-lg"></div>
                 </div>
               )}
             </div>
@@ -412,8 +422,8 @@ const App: React.FC = () => {
         ) : <ReportDisplay report={report} />}
       </main>
 
-      <footer className="max-w-7xl mx-auto px-8 py-16 text-center">
-        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.6em]">Medical Academic Audit Platform v1.0.4 - Secure Protocol</p>
+      <footer className="max-w-7xl mx-auto px-8 py-20 text-center">
+        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.6em]">AnatomyGuard Secure Protocol v1.1.2</p>
       </footer>
 
       <style>{`
