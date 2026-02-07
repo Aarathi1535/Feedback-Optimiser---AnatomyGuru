@@ -1,54 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
-
-// --- TYPES ---
-
-enum ProcessingStatus {
-  IDLE = 'IDLE',
-  ANALYZING = 'ANALYZING',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'ERROR'
-}
-
-interface QuestionFeedback {
-  questionNo: string;
-  maxMarks: string | number;
-  marksAwarded: string | number;
-  keyAnswerPoints: string;
-  studentAnswerSummary: string;
-  humanFeedback: string;
-  aiFeedbackAddition: string;
-}
-
-interface ScoreVerification {
-  calculatedTotal: number;
-  reportedTotal: number;
-  status: 'Correct' | 'Incorrect';
-  discrepancyExplanation?: string;
-}
-
-interface AIObservation {
-  section: string;
-  observation: string;
-}
-
-interface ActionSummary {
-  task: string;
-  status: string;
-  evidence: string;
-}
-
-interface EvaluationReport {
-  examReference: string;
-  evaluationType: string;
-  aiModelRole: string;
-  generalisedFeedback: string;
-  questionWiseFeedback: QuestionFeedback[];
-  scoreVerification: ScoreVerification;
-  finalizedFeedback: AIObservation[];
-  actionSummary: ActionSummary[];
-}
+import { 
+  ProcessingStatus, 
+  QuestionFeedback, 
+  ScoreVerification, 
+  AIObservation, 
+  ActionSummary, 
+  EvaluationReport 
+} from './types';
 
 // --- SERVICES ---
 
@@ -69,17 +29,13 @@ D. Verification: Recalculate marks and compare with reported total.
 OUTPUT FORMAT: Valid JSON.
 `;
 
+// Helper function to generate evaluation report using Gemini API
 async function generateEvaluationReport(
   mergedFile: { name: string; data: string; mimeType: string },
   feedbackFile: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  // Ensure we use process.env.API_KEY directly as required
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key configuration is missing. Please check environment variables.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Initialize Gemini API with key from environment variable directly.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
@@ -154,10 +110,12 @@ async function generateEvaluationReport(
         },
         required: ["examReference", "evaluationType", "aiModelRole", "generalisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback", "actionSummary"]
       },
-      thinkingConfig: { thinkingBudget: 4000 }
+      // Setting high thinking budget for complex academic reasoning as recommended for Gemini 3 Pro
+      thinkingConfig: { thinkingBudget: 32768 }
     }
   });
 
+  // Extract text property directly as per Gemini API guidelines (not a method call)
   return JSON.parse(response.text || "{}") as EvaluationReport;
 }
 
@@ -332,7 +290,7 @@ const App: React.FC = () => {
   const handleProcess = async () => {
     if (!mergedFile || !feedbackFile) return setError("Analysis requires both PDF artifact files.");
     
-    // Preliminary check for API key
+    // Preliminary check for API key availability
     if (!process.env.API_KEY) {
       setError("AI Configuration missing: process.env.API_KEY is undefined.");
       return;
