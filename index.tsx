@@ -1,54 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
-
-// --- TYPES ---
-
-enum ProcessingStatus {
-  IDLE = 'IDLE',
-  ANALYZING = 'ANALYZING',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'ERROR'
-}
-
-interface QuestionFeedback {
-  questionNo: string;
-  maxMarks: string | number;
-  marksAwarded: string | number;
-  keyAnswerPoints: string;
-  studentAnswerSummary: string;
-  humanFeedback: string;
-  aiFeedbackAddition: string;
-}
-
-interface ScoreVerification {
-  calculatedTotal: number;
-  reportedTotal: number;
-  status: 'Correct' | 'Incorrect';
-  discrepancyExplanation?: string;
-}
-
-interface AIObservation {
-  section: string;
-  observation: string;
-}
-
-interface ActionSummary {
-  task: string;
-  status: string;
-  evidence: string;
-}
-
-interface EvaluationReport {
-  examReference: string;
-  evaluationType: string;
-  aiModelRole: string;
-  generalisedFeedback: string;
-  questionWiseFeedback: QuestionFeedback[];
-  scoreVerification: ScoreVerification;
-  finalizedFeedback: AIObservation[];
-  actionSummary: ActionSummary[];
-}
+// Import shared types from the corrected types.ts module
+import { 
+  ProcessingStatus, 
+  EvaluationReport, 
+  QuestionFeedback, 
+  ScoreVerification, 
+  AIObservation, 
+  ActionSummary 
+} from './types';
 
 // --- SERVICES ---
 
@@ -61,35 +22,31 @@ INPUTS PROVIDED:
 2. Human Feedback PDF Content: Marks awarded, human comments, and reported total score.
 
 TASK OBJECTIVES:
-A. Alignment Analysis: Compare student OCR with official key. Identify anatomical omissions.
-B. Feedback Augmentation: Create a ONE LINE "AI Feedback Addition" per question clarifying missing anatomical details.
-C. Generalised Synthesis: Professional academic summary of overall performance.
-D. Verification: Recalculate marks and compare with reported total.
+A. Alignment Analysis: Compare student OCR with official key. Identify anatomical omissions or errors.
+B. Feedback Augmentation: Create a ONE LINE "AI Feedback Addition" per question clarifying missing anatomical details from the marking scheme.
+C. Generalised Synthesis: Professional academic summary of student's overall performance.
+D. Verification: Recalculate total marks from individual question scores and compare with the reported total in the human feedback.
 
-OUTPUT FORMAT: Valid JSON.
+OUTPUT FORMAT: Generate a valid JSON object matching the defined schema.
 `;
 
 async function generateEvaluationReport(
   mergedFile: { name: string; data: string; mimeType: string },
   feedbackFile: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  // Ensure we use process.env.API_KEY directly as required
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key configuration is missing. Please check environment variables.");
-  }
+  // Always initialize GoogleGenAI with the required named parameter and the API key from environment
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const ai = new GoogleGenAI({ apiKey });
-
+  // Use the recommended gemini-3-pro-preview model for complex text/reasoning tasks
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: [
       {
         parts: [
           { text: PROMPT_INSTRUCTION },
-          { text: `Merged PDF Filename: ${mergedFile.name}` },
-          { inlineData: { data: mergedFile.data, mimeType: mergedFile.mimeType } },
-          { inlineData: { data: feedbackFile.data, mimeType: feedbackFile.mimeType } }
+          { text: `Reference Files Provided: ${mergedFile.name}, ${feedbackFile.name}` },
+          { inlineData: { data: mergedFile.data, mimeType: 'application/pdf' } },
+          { inlineData: { data: feedbackFile.data, mimeType: 'application/pdf' } }
         ]
       }
     ],
@@ -154,11 +111,15 @@ async function generateEvaluationReport(
         },
         required: ["examReference", "evaluationType", "aiModelRole", "generalisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback", "actionSummary"]
       },
-      thinkingConfig: { thinkingBudget: 4000 }
+      // Using thinkingConfig for deep medical reasoning with gemini-3-pro-preview
+      thinkingConfig: { thinkingBudget: 32768 }
     }
   });
 
-  return JSON.parse(response.text || "{}") as EvaluationReport;
+  // Extract the text output from the GenerateContentResponse object directly via the .text property
+  const responseText = response.text;
+  if (!responseText) throw new Error("The AI model failed to generate a response.");
+  return JSON.parse(responseText.trim()) as EvaluationReport;
 }
 
 // --- COMPONENTS ---
@@ -171,21 +132,23 @@ const FileUpload: React.FC<{
   fileName: string | null;
 }> = ({ id, label, description, onChange, fileName }) => (
   <div className="flex flex-col space-y-2">
-    <label htmlFor={id} className="text-sm font-semibold text-slate-700">{label}</label>
-    <div className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-200 ${fileName ? 'border-blue-800 bg-blue-50 shadow-inner' : 'border-slate-300 hover:border-blue-800 bg-white shadow-sm'}`}>
+    <label htmlFor={id} className="text-sm font-bold text-slate-700 uppercase tracking-wide">{label}</label>
+    <div className={`relative border-2 border-dashed rounded-2xl p-8 transition-all duration-300 ${fileName ? 'border-indigo-600 bg-indigo-50/50 shadow-inner' : 'border-slate-300 hover:border-indigo-400 bg-white shadow-sm'}`}>
       <input type="file" id={id} accept="application/pdf" onChange={(e) => onChange(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-      <div className="flex flex-col items-center justify-center space-y-2 text-center">
+      <div className="flex flex-col items-center justify-center space-y-3 text-center">
         {fileName ? (
           <>
-            <div className="w-10 h-10 bg-blue-900 rounded-full flex items-center justify-center text-white mb-1 shadow-lg">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+            <div className="w-12 h-12 bg-indigo-900 rounded-xl flex items-center justify-center text-white mb-1 shadow-lg transform scale-110">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
             </div>
-            <p className="text-sm font-bold text-blue-900 truncate max-w-[200px]">{fileName}</p>
+            <p className="text-sm font-extrabold text-indigo-950 truncate max-w-[220px]">{fileName}</p>
           </>
         ) : (
           <>
-            <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            <p className="text-sm font-medium text-slate-500">{description}</p>
+            <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 mb-1 border border-slate-100">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{description}</p>
           </>
         )}
       </div>
@@ -194,68 +157,78 @@ const FileUpload: React.FC<{
 );
 
 const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
-  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-6 duration-700">
-    {/* Header Banner */}
-    <div className="bg-blue-950 text-white rounded-2xl p-10 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-      <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="inline-flex items-center px-3 py-1 bg-blue-800 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-700 mb-4">Verification Completed</div>
-          <h2 className="text-3xl font-black tracking-tight">{report.examReference}</h2>
-          <div className="flex items-center space-x-6 text-sm font-medium opacity-70">
-            <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>{report.evaluationType}</span>
-            <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>{report.aiModelRole}</span>
+  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+    {/* Hero Banner */}
+    <div className="bg-indigo-950 text-white rounded-[2rem] p-12 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
+      <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-500/10 rounded-full -mr-[20rem] -mt-[20rem] blur-[100px]"></div>
+      <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-8">
+        <div className="space-y-4">
+          <div className="inline-flex items-center px-4 py-1.5 bg-indigo-800/50 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 border border-indigo-700/50">Verification Protocol Activated</div>
+          <h2 className="text-5xl font-black tracking-tighter leading-none">{report.examReference}</h2>
+          <div className="flex flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-widest opacity-60">
+            <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>{report.evaluationType}</span>
+            <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>{report.aiModelRole}</span>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Audit Score</p>
-          <p className="text-5xl font-black tabular-nums">{report.scoreVerification.reportedTotal}<span className="text-xl opacity-40 ml-1">pts</span></p>
+          <p className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.3em] mb-2">Final Validated Score</p>
+          <div className="flex items-baseline justify-end">
+            <span className="text-7xl font-black tabular-nums tracking-tighter">{report.scoreVerification.reportedTotal}</span>
+            <span className="text-2xl font-black opacity-30 ml-2">PTS</span>
+          </div>
         </div>
       </div>
     </div>
 
-    {/* Synthesis Card */}
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
-      <div className="bg-slate-50 border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center">
-          <svg className="w-4 h-4 mr-2 text-blue-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-          General Academic Synthesis
+    {/* Summary Card */}
+    <section className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden group">
+      <div className="bg-slate-50/50 border-b border-slate-100 px-10 py-6 flex items-center justify-between">
+        <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em] flex items-center">
+          <div className="w-8 h-8 rounded-lg bg-indigo-900 text-white flex items-center justify-center mr-4 shadow-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
+          Executive Academic Synthesis
         </h3>
       </div>
-      <div className="p-10 leading-relaxed text-slate-700 italic border-l-4 border-blue-900 m-8 bg-slate-50 shadow-inner">
-        <p className="text-lg">{report.generalisedFeedback}</p>
+      <div className="p-12 leading-[1.8] text-slate-700 text-xl font-medium italic border-l-[6px] border-indigo-900 bg-slate-50/30 m-10 rounded-2xl shadow-inner group-hover:bg-slate-50 transition-colors">
+        "{report.generalisedFeedback}"
       </div>
     </section>
 
-    {/* Question Analysis */}
-    <section className="space-y-6">
-      <h3 className="text-xl font-black text-slate-900 px-2 flex items-center">
-        <span className="bg-blue-900 text-white w-10 h-10 rounded-xl flex items-center justify-center mr-4 text-sm shadow-xl">1</span>
-        Detailed Alignment Analysis
-      </h3>
-      <div className="overflow-x-auto rounded-3xl border border-slate-200 shadow-2xl bg-white">
-        <table className="w-full text-left border-collapse min-w-[1200px]">
+    {/* Primary Analysis Table */}
+    <section className="space-y-8">
+      <div className="flex items-center justify-between px-2">
+        <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
+          Detailed Alignment Audit
+          <span className="ml-4 px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-200">Question Wise</span>
+        </h3>
+      </div>
+      <div className="overflow-x-auto rounded-[2.5rem] border border-slate-200 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] bg-white">
+        <table className="w-full text-left border-collapse min-w-[1300px]">
           <thead>
-            <tr className="bg-slate-50 text-slate-600 uppercase text-[10px] font-black border-b border-slate-200">
-              <th className="p-6 w-20 text-center">No</th>
-              <th className="p-6 w-32 text-center">Marks</th>
-              <th className="p-6">Requirements</th>
-              <th className="p-6">Student Content</th>
-              <th className="p-6 bg-blue-50/50 text-blue-950 border-l-4 border-blue-900">AI Augmented Observation</th>
+            <tr className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-200">
+              <th className="p-8 w-24 text-center">Reference</th>
+              <th className="p-8 w-36 text-center">Score Delta</th>
+              <th className="p-8">Required Criteria (Key)</th>
+              <th className="p-8">Student Contribution (OCR)</th>
+              <th className="p-8 bg-indigo-50/30 text-indigo-950 border-l-4 border-indigo-900">AI Augmented Insight</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {report.questionWiseFeedback.map((q, idx) => (
-              <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-150 group">
-                <td className="p-6 font-black text-slate-400 text-center group-hover:text-blue-900">{q.questionNo}</td>
-                <td className="p-6 text-center">
-                  <span className="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full font-black text-sm border border-emerald-100">{q.marksAwarded} / {q.maxMarks}</span>
+              <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-300 group">
+                <td className="p-8 font-black text-slate-400 text-center text-lg group-hover:text-indigo-900 group-hover:scale-110 transition-transform">#{q.questionNo}</td>
+                <td className="p-8 text-center">
+                  <div className="inline-flex flex-col">
+                    <span className="text-xl font-black text-slate-900 tabular-nums">{q.marksAwarded}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">OF {q.maxMarks}</span>
+                  </div>
                 </td>
-                <td className="p-6 text-sm text-slate-500 italic max-w-xs">{q.keyAnswerPoints}</td>
-                <td className="p-6 text-sm text-slate-700 leading-relaxed max-w-sm">{q.studentAnswerSummary}</td>
-                <td className="p-6 bg-blue-50/20 font-bold text-blue-950 border-l-4 border-blue-900 leading-relaxed text-sm">
+                <td className="p-8 text-sm text-slate-500 italic max-w-xs leading-relaxed font-medium">{q.keyAnswerPoints}</td>
+                <td className="p-8 text-sm text-slate-700 leading-relaxed max-w-sm font-semibold">{q.studentAnswerSummary}</td>
+                <td className="p-8 bg-indigo-50/10 font-bold text-indigo-950 border-l-4 border-indigo-900/40 group-hover:border-indigo-900 leading-relaxed text-sm">
                   <div className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-1 text-blue-900 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                    <div className="w-6 h-6 rounded-md bg-indigo-900 text-white flex items-center justify-center mr-4 flex-shrink-0 mt-0.5 shadow-md">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                    </div>
                     {q.aiFeedbackAddition}
                   </div>
                 </td>
@@ -266,43 +239,44 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Verification Footer Cards */}
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <section className="bg-white rounded-3xl border border-slate-200 shadow-xl p-10">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Score Integrity Check</h3>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <span className="text-slate-500 font-medium">Recalculated Sum</span>
-            <span className="font-black text-2xl tabular-nums">{report.scoreVerification.calculatedTotal}</span>
+    {/* Verification Blocks */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+      <section className="bg-white rounded-[2rem] border border-slate-200 shadow-xl p-12">
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-10">Integrity Matrix</h3>
+        <div className="space-y-8">
+          <div className="flex items-center justify-between pb-6 border-b border-slate-100">
+            <span className="text-slate-500 font-bold text-sm uppercase tracking-widest">Calculated AI Sum</span>
+            <span className="font-black text-4xl tabular-nums tracking-tighter">{report.scoreVerification.calculatedTotal}</span>
           </div>
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <span className="text-slate-500 font-medium">Reported Total</span>
-            <span className="font-black text-2xl tabular-nums">{report.scoreVerification.reportedTotal}</span>
+          <div className="flex items-center justify-between pb-6 border-b border-slate-100">
+            <span className="text-slate-500 font-bold text-sm uppercase tracking-widest">Human Reported Total</span>
+            <span className="font-black text-4xl tabular-nums tracking-tighter">{report.scoreVerification.reportedTotal}</span>
           </div>
-          <div className={`mt-6 py-4 rounded-2xl font-black uppercase tracking-widest text-sm flex items-center justify-center ${report.scoreVerification.status === 'Correct' ? 'bg-emerald-50 text-emerald-800 border-2 border-emerald-100' : 'bg-rose-50 text-rose-800 border-2 border-rose-100'}`}>
-             {report.scoreVerification.status}
+          <div className={`mt-8 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center border-2 shadow-sm ${report.scoreVerification.status === 'Correct' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-800 border-rose-100'}`}>
+             <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d={report.scoreVerification.status === 'Correct' ? "M5 13l4 4L19 7" : "M6 18L18 6M6 6l12 12"} /></svg>
+             Verification Status: {report.scoreVerification.status}
           </div>
         </div>
       </section>
 
-      <section className="bg-slate-900 rounded-3xl p-10 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full -mr-24 -mt-24 blur-3xl"></div>
+      <section className="bg-slate-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between">
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full -ml-32 -mb-32 blur-[80px]"></div>
         <div className="relative z-10">
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] mb-8">AI Observation Patterns</h4>
-          <div className="space-y-6">
+          <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.5em] mb-10">AI Pattern Observations</h4>
+          <div className="space-y-8">
             {report.finalizedFeedback.slice(0, 3).map((obs, i) => (
-              <div key={i} className="flex space-x-4">
-                <span className="text-blue-500 font-black opacity-30">0{i+1}</span>
+              <div key={i} className="flex space-x-6 group/obs">
+                <span className="text-indigo-500 font-black text-xl opacity-20 group-hover/obs:opacity-100 transition-opacity">0{i+1}</span>
                 <div>
-                  <h5 className="font-black text-xs text-blue-300 uppercase mb-1">{obs.section}</h5>
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">{obs.observation}</p>
+                  <h5 className="font-black text-[10px] text-indigo-300 uppercase tracking-widest mb-2">{obs.section}</h5>
+                  <p className="text-base text-slate-400 leading-relaxed font-medium group-hover/obs:text-slate-200 transition-colors">{obs.observation}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="mt-10 flex space-x-4">
-          <button className="px-6 py-3 bg-blue-700 hover:bg-blue-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Download Audit PDF</button>
+        <div className="mt-12 relative z-10">
+          <button onClick={() => window.print()} className="w-full px-8 py-4 bg-indigo-700 hover:bg-indigo-600 rounded-2xl text-xs font-black uppercase tracking-[0.3em] transition-all shadow-xl hover:shadow-indigo-500/20 active:scale-[0.98]">Commit to Official Records</button>
         </div>
       </section>
     </div>
@@ -319,24 +293,17 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Reveal app and remove loader when components ready
     const loader = document.getElementById('loader');
     if (loader) {
       setTimeout(() => {
         loader.style.opacity = '0';
         setTimeout(() => loader.remove(), 500);
-      }, 800);
+      }, 500);
     }
   }, []);
 
   const handleProcess = async () => {
-    if (!mergedFile || !feedbackFile) return setError("Analysis requires both PDF artifact files.");
-    
-    // Preliminary check for API key
-    if (!process.env.API_KEY) {
-      setError("AI Configuration missing: process.env.API_KEY is undefined.");
-      return;
-    }
+    if (!mergedFile || !feedbackFile) return setError("System requires both Artifact Reference and Evaluator Feedback PDFs.");
 
     setStatus(ProcessingStatus.ANALYZING);
     setError(null);
@@ -354,7 +321,7 @@ const App: React.FC = () => {
       setStatus(ProcessingStatus.COMPLETED);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || "Evaluation failed during document extraction.");
+      setError(e.message || "Extraction Protocol Failure. Ensure PDF integrity.");
       setStatus(ProcessingStatus.ERROR);
     }
   };
@@ -368,73 +335,91 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#fcfdfe] text-slate-900">
-      <nav className="bg-white border-b border-slate-200/60 sticky top-0 z-50 px-6 h-20 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-blue-900 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl">🛡️</div>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-8 h-24 flex items-center justify-between shadow-sm">
+        <div className="flex items-center space-x-5">
+          <div className="w-14 h-14 bg-indigo-900 rounded-[1.25rem] flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-900/20 rotate-3">🛡️</div>
           <div>
-            <h1 className="text-xl font-black tracking-tight leading-none">AnatomyGuard</h1>
-            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1">Medical Education Audit</p>
+            <h1 className="text-2xl font-black tracking-tighter leading-none">AnatomyGuard</h1>
+            <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.4em] mt-2">Evaluation Verification Core</p>
           </div>
         </div>
-        {report && <button onClick={reset} className="px-6 py-2.5 bg-slate-100 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all">New Evaluation</button>}
+        {report && (
+          <button onClick={reset} className="px-8 py-3 bg-slate-100 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-900 hover:text-white transition-all shadow-sm">
+            Recalibrate Audit
+          </button>
+        )}
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 pt-12">
+      <main className="max-w-7xl mx-auto px-8 pt-16">
         {!report || status === ProcessingStatus.ANALYZING ? (
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-12">
-               <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4">Academic Evaluation Analysis</h2>
-               <p className="text-slate-500 font-medium">Upload primary references and human feedback to generate audit observations.</p>
+            <div className="text-center mb-16 space-y-4">
+               <h2 className="text-5xl font-black text-slate-900 tracking-tighter">Academic Verification Portal</h2>
+               <p className="text-slate-500 font-bold text-lg max-w-lg mx-auto leading-relaxed">Cross-analyze handwritten scripts against marking keys and human evaluator feedback.</p>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden">
-              <div className="bg-slate-50/80 px-10 py-8 border-b border-slate-100">
-                <h3 className="text-lg font-black text-slate-800">Document Upload</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Ensure high-resolution PDF for OCR accuracy</p>
+            <div className="bg-white rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden">
+              <div className="bg-slate-50/50 px-12 py-10 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">Artifact Intake</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Multi-Document Analysis Enabled</p>
+                </div>
+                <div className="flex space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]"></div>
+                  <div className="w-3 h-3 rounded-full bg-slate-200"></div>
+                  <div className="w-3 h-3 rounded-full bg-slate-200"></div>
+                </div>
               </div>
-              <div className="p-10 space-y-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <FileUpload id="m" label="Reference PDF" description="Question + Key + Answers" onChange={setMergedFile} fileName={mergedFile?.name || null} />
-                  <FileUpload id="f" label="Human Feedback" description="Marks + Evaluator Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
+              <div className="p-12 space-y-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                  <FileUpload id="m" label="Ref Reference" description="Question + Answer Key + Student Work" onChange={setMergedFile} fileName={mergedFile?.name || null} />
+                  <FileUpload id="f" label="Human Audit" description="Teacher's Scored Sheets + Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
                 </div>
 
                 {error && (
-                  <div className="p-5 bg-rose-50 border border-rose-100 text-rose-700 text-sm rounded-2xl flex items-start space-x-3">
-                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    <p className="font-semibold">{error}</p>
+                  <div className="p-6 bg-rose-50 border border-rose-100 text-rose-800 text-sm font-bold rounded-[1.5rem] flex items-start space-x-4 shadow-sm animate-shake">
+                    <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <p>{error}</p>
                   </div>
                 )}
 
                 <button 
                   onClick={handleProcess} 
                   disabled={status === ProcessingStatus.ANALYZING || !mergedFile || !feedbackFile} 
-                  className="w-full py-5 bg-blue-900 text-white rounded-2xl font-black text-xl shadow-2xl hover:bg-blue-950 disabled:opacity-50 transition-all active:scale-[0.98] group flex items-center justify-center space-x-4"
+                  className="w-full py-6 bg-indigo-900 text-white rounded-[1.75rem] font-black text-xl shadow-[0_20px_40px_-10px_rgba(49,46,129,0.3)] hover:bg-indigo-950 disabled:opacity-50 transition-all active:scale-[0.97] flex items-center justify-center space-x-5 hover:-translate-y-1"
                 >
                   {status === ProcessingStatus.ANALYZING ? (
                     <>
                       <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-                      <span>Analyzing Medical Records...</span>
+                      <span className="tracking-tight uppercase text-base">Running Verification Protocol...</span>
                     </>
                   ) : (
                     <>
-                      <span>Generate AI-Augmented Report</span>
-                      <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                      <span className="tracking-tight uppercase text-base">Initiate AI Audit Analysis</span>
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                     </>
                   )}
                 </button>
               </div>
-              {status === ProcessingStatus.ANALYZING && <div className="h-1 bg-slate-100 relative overflow-hidden"><div className="h-full bg-blue-900 animate-[progress_2s_ease-in-out_infinite] w-[40%] absolute top-0 left-0"></div></div>}
+              {status === ProcessingStatus.ANALYZING && (
+                <div className="h-1.5 bg-slate-100 relative overflow-hidden">
+                  <div className="h-full bg-indigo-600 animate-[progress_1.5s_ease-in-out_infinite] w-[40%] absolute top-0 left-0 shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
+                </div>
+              )}
             </div>
           </div>
         ) : <ReportDisplay report={report} />}
       </main>
 
+      <footer className="max-w-7xl mx-auto px-8 py-16 text-center">
+        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.6em]">Medical Academic Audit Platform v1.0.4 - Secure Protocol</p>
+      </footer>
+
       <style>{`
-        @keyframes progress {
-          0% { left: -40%; }
-          100% { left: 100%; }
-        }
+        @keyframes progress { 0% { left: -40%; } 100% { left: 100%; } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+        .animate-shake { animation: shake 0.3s ease-in-out; }
       `}</style>
     </div>
   );
@@ -442,5 +427,5 @@ const App: React.FC = () => {
 
 // --- RENDER ---
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
+const root = createRoot(document.getElementById('root')!);
 root.render(<App />);
