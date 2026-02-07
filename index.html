@@ -8,31 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
   
   <!-- Babel Standalone for on-the-fly TSX transpilation -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    .mono {
-      font-family: 'JetBrains Mono', monospace;
-    }
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #f1f1f1;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #888;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #555;
+    body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    #loader {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #f8fafc; display: flex; align-items: center; justify-content: center;
+      z-index: 9999; transition: opacity 0.3s ease-out;
     }
   </style>
 
@@ -50,18 +37,16 @@
 </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
+  <!-- Initial Loader while Babel transpiles -->
+  <div id="loader">
+    <div class="text-center">
+      <div class="inline-block w-8 h-8 border-4 border-blue-900 border-t-transparent rounded-full animate-spin"></div>
+      <p class="mt-4 text-slate-500 font-medium">Initializing AnatomyGuard...</p>
+    </div>
+  </div>
+
   <div id="root"></div>
   
-  <!-- 
-    The script must be type="text/babel" to allow Babel Standalone to transpile the TSX.
-    data-type="module" ensures it behaves as an ES module.
-    data-presets="react,typescript" tells Babel how to handle the code.
-  -->
-  <script 
-    type="text/babel" 
-    data-type="module" 
-    data-presets="react,typescript" 
-    src="./index.tsx"
-  ></script>
+  <script type="text/babel" data-type="module" data-presets="react,typescript" src="./index.tsx"></script>
 </body>
 </html>
