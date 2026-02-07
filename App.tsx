@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
-import FileUpload from './components/FileUpload';
-import ReportDisplay from './components/ReportDisplay';
-import { EvaluationReport, ProcessingStatus } from './types';
-import { generateEvaluationReport } from './services/geminiService';
+import FileUpload from './components/FileUpload.tsx';
+import ReportDisplay from './components/ReportDisplay.tsx';
+import { EvaluationReport, ProcessingStatus } from './types.ts';
+import { generateEvaluationReport } from './services/geminiService.ts';
 
 const App: React.FC = () => {
   const [mergedFile, setMergedFile] = useState<File | null>(null);
@@ -186,7 +185,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      
       <style>{`
         @keyframes progress {
           0% { transform: translateX(-100%); }

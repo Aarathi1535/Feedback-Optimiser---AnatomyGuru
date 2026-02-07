@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { EvaluationReport } from "../types";
+import { EvaluationReport } from "../types.ts";
 
 const PROMPT_INSTRUCTION = `
 You are an AI academic evaluation assistant for medical anatomy education.

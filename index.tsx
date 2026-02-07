@@ -1,7 +1,6 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from './App.tsx';
 
 const rootElement = document.getElementById('root');
 
@@ -17,9 +16,11 @@ if (!rootElement) {
     );
   } catch (error) {
     console.error("React rendering error:", error);
-    rootElement.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">
-      <h1>Application Error</h1>
-      <p>The application failed to start. Please check the console for more details.</p>
-    </div>`;
+    if (rootElement) {
+      rootElement.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">
+        <h1>Application Error</h1>
+        <p>The application failed to start. Please check the console for more details.</p>
+      </div>`;
+    }
   }
 }
