@@ -1,162 +1,28 @@
+
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI, Type } from "@google/genai";
+import { EvaluationReport, ProcessingStatus } from './types';
 
-// --- TYPES & INTERFACES ---
-
-enum ProcessingStatus {
-  IDLE = 'IDLE',
-  ANALYZING = 'ANALYZING',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'ERROR'
-}
-
-interface QuestionFeedback {
-  questionNo: string;
-  maxMarks: string | number;
-  marksAwarded: string | number;
-  keyAnswerPoints: string;
-  studentAnswerSummary: string;
-  humanFeedback: string;
-  aiFeedbackAddition: string;
-}
-
-interface ScoreVerification {
-  calculatedTotal: number;
-  reportedTotal: number;
-  status: 'Correct' | 'Incorrect';
-  discrepancyExplanation?: string;
-}
-
-interface AIObservation {
-  section: string;
-  observation: string;
-}
-
-interface ActionSummary {
-  task: string;
-  status: string;
-  evidence: string;
-}
-
-interface EvaluationReport {
-  examReference: string;
-  evaluationType: string;
-  aiModelRole: string;
-  elaboratedGeneralisedFeedback: string;
-  questionWiseFeedback: QuestionFeedback[];
-  scoreVerification: ScoreVerification;
-  finalizedFeedback: AIObservation[];
-  actionSummary: ActionSummary[];
-}
-
-// --- EVALUATION SERVICE ---
-
-const SYSTEM_INSTRUCTION = `
-You are an AI Academic Evaluation Assistant for Medical Anatomy Education.
-
-MISSION:
-Analyze two primary inputs:
-1. "Artifact Repository": Contains the Question Paper, Official Marking Scheme, and the Student's Handwritten Script (PDF).
-2. "Evaluator feedback": Contains the human teacher's scores and initial comments (Word or PDF).
-
-TASK OBJECTIVES:
-A. DATA EXTRACTION: Extract individual marks and comments per question exactly as provided by the human evaluator.
-B. AI ENHANCEMENT: Cross-reference the student's handwritten answer sheet against the marking scheme. Add a new "AI Feedback Addition" for EACH question. This must be a concise (one line) technical anatomical suggestion or clarification that adds value to the student's learning.
-C. FEEDBACK ELABORATION: Locate the generalized overall feedback in the manual evaluator report. ELABORATE this summary into a 3-5 sentence formal academic synthesis. It should maintain the original human evaluator's sentiment but refine it into professional medical education language.
-D. SCORE VERIFICATION: Audit the reported total by summing up the extracted individual question marks.
-E. PATTERN RECOGNITION: Summarize 4 critical high-level performance observations.
-
-OUTPUT: Return strictly valid JSON.
-`;
+// --- EVALUATION SERVICE PROXY ---
 
 async function runMedicalEvaluation(
   artifact: { name: string; data: string; mimeType: string },
   humanFeedback: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  // Use the API key exclusively from environment variables
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: [
-      {
-        parts: [
-          { text: SYSTEM_INSTRUCTION },
-          { text: `Artifact: ${artifact.name}. Human Feedback: ${humanFeedback.name}.` },
-          { inlineData: { data: artifact.data, mimeType: artifact.mimeType } },
-          { inlineData: { data: humanFeedback.data, mimeType: humanFeedback.mimeType } }
-        ]
-      }
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          examReference: { type: Type.STRING },
-          evaluationType: { type: Type.STRING },
-          aiModelRole: { type: Type.STRING },
-          elaboratedGeneralisedFeedback: { type: Type.STRING },
-          questionWiseFeedback: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                questionNo: { type: Type.STRING },
-                maxMarks: { type: Type.STRING },
-                marksAwarded: { type: Type.STRING },
-                keyAnswerPoints: { type: Type.STRING },
-                studentAnswerSummary: { type: Type.STRING },
-                humanFeedback: { type: Type.STRING },
-                aiFeedbackAddition: { type: Type.STRING }
-              },
-              required: ["questionNo", "maxMarks", "marksAwarded", "keyAnswerPoints", "studentAnswerSummary", "humanFeedback", "aiFeedbackAddition"]
-            }
-          },
-          scoreVerification: {
-            type: Type.OBJECT,
-            properties: {
-              calculatedTotal: { type: Type.NUMBER },
-              reportedTotal: { type: Type.NUMBER },
-              status: { type: Type.STRING },
-              discrepancyExplanation: { type: Type.STRING }
-            },
-            required: ["calculatedTotal", "reportedTotal", "status"]
-          },
-          finalizedFeedback: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                section: { type: Type.STRING },
-                observation: { type: Type.STRING }
-              },
-              required: ["section", "observation"]
-            }
-          },
-          actionSummary: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                task: { type: Type.STRING },
-                status: { type: Type.STRING },
-                evidence: { type: Type.STRING }
-              },
-              required: ["task", "status", "evidence"]
-            }
-          }
-        },
-        required: ["examReference", "evaluationType", "aiModelRole", "elaboratedGeneralisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback", "actionSummary"]
-      },
-      thinkingConfig: { thinkingBudget: 32768 }
-    }
+  const response = await fetch('/.netlify/functions/evaluate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ artifact, humanFeedback }),
   });
 
-  const text = response.text;
-  if (!text) throw new Error("The AI model failed to generate a report.");
-  return JSON.parse(text.trim());
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `System Error: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
 }
 
 // --- UI COMPONENTS ---
@@ -180,7 +46,7 @@ const FileInput: React.FC<{
       <div className="flex flex-col items-center justify-center space-y-3 text-center">
         {selectedFile ? (
           <>
-            <div className="w-12 h-12 bg-indigo-900 rounded-xl flex items-center justify-center text-white mb-1 shadow-lg">
+            <div className="w-12 h-12 bg-indigo-950 rounded-xl flex items-center justify-center text-white mb-1 shadow-lg">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
             </div>
             <p className="text-sm font-bold text-indigo-950 truncate max-w-[200px]">{selectedFile.name}</p>
@@ -198,9 +64,8 @@ const FileInput: React.FC<{
   </div>
 );
 
-const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
-  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-    {/* Executive Header */}
+const ReportUI: React.FC<{ report: EvaluationReport }> = ({ report }) => (
+  <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-8 duration-700">
     <div className="bg-indigo-950 text-white rounded-[3rem] p-12 shadow-2xl relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-indigo-500/10 rounded-full -mr-[25rem] -mt-[25rem] blur-[120px]"></div>
       <div className="relative z-10 flex flex-col lg:flex-row justify-between lg:items-end gap-12">
@@ -222,7 +87,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </div>
 
-    {/* Elaborated synthesis */}
     <section className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden group">
       <div className="bg-indigo-900 px-10 py-6 flex items-center justify-between border-b border-indigo-800">
         <h3 className="text-[10px] font-black text-white uppercase tracking-[0.4em] flex items-center">
@@ -235,7 +99,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Augmented Audit Analysis Table */}
     <section className="space-y-6">
       <h3 className="text-2xl font-black text-slate-900 tracking-tighter flex items-center px-2">
         Augmented Audit Analysis
@@ -277,7 +140,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Verification Blocks */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
       <section className="bg-white rounded-[3rem] border border-slate-200 shadow-xl p-14">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mb-12">Score Integrity Audit</h3>
@@ -358,7 +220,7 @@ const App: React.FC = () => {
       setStatus(ProcessingStatus.COMPLETED);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || "A system audit failure occurred. Check file types and API configuration.");
+      setError(e.message || "A system audit failure occurred. Check Netlify environment variables.");
       setStatus(ProcessingStatus.ERROR);
     }
   };
@@ -452,7 +314,7 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-        ) : <ReportDisplay report={report} />}
+        ) : <ReportUI report={report} />}
       </main>
 
       <footer className="max-w-7xl mx-auto px-10 py-32 text-center border-t border-slate-100 mt-20">
