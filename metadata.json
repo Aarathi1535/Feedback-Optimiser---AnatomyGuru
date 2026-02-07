@@ -1,0 +1,7 @@
+{
+  "name": "AnatomyGuard: Medical Evaluation Assistant",
+  "description": "A specialized AI tool for medical anatomy educators to supplement human evaluation with grounded, concise, and audit-safe feedback while verifying score integrity.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
