@@ -12,11 +12,6 @@
   
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <script>
-    // Prevent "process is not defined" error in pure browser environments
-    window.process = window.process || { env: {} };
-  </script>
-
   <style>
     body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
     #loader {
@@ -26,6 +21,8 @@
     }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .animate-spin { animation: spin 1s linear infinite; }
+    .animate-shake { animation: shake 0.3s ease-in-out; }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
     @keyframes progress { 0% { left: -40%; } 100% { left: 100%; } }
   </style>
 
