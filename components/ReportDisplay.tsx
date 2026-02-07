@@ -45,7 +45,8 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report }) => {
           <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest bg-blue-800 px-2 py-1 rounded">AI Enhanced</span>
         </div>
         <div className="p-8 text-slate-700 leading-relaxed italic border-l-4 border-blue-900 m-6 bg-slate-50">
-          {report.generalisedFeedback}
+          {/* Fix: use elaboratedGeneralisedFeedback as defined in interface */}
+          {report.elaboratedGeneralisedFeedback}
         </div>
       </section>
 

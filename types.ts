@@ -1,4 +1,3 @@
-// Shared types for the medical academic evaluation assistant
 export enum ProcessingStatus {
   IDLE = 'IDLE',
   ANALYZING = 'ANALYZING',
@@ -38,7 +37,7 @@ export interface EvaluationReport {
   examReference: string;
   evaluationType: string;
   aiModelRole: string;
-  generalisedFeedback: string;
+  elaboratedGeneralisedFeedback: string;
   questionWiseFeedback: QuestionFeedback[];
   scoreVerification: ScoreVerification;
   finalizedFeedback: AIObservation[];
