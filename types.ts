@@ -1,1 +1,1 @@
-// Logic consolidated into index.tsx
+// Logic moved to index.tsx for consistent no-build deployment

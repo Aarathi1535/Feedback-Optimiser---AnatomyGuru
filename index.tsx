@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
+import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 
-// --- TYPES & INTERFACES ---
+// --- TYPES ---
 
 enum ProcessingStatus {
   IDLE = 'IDLE',
@@ -61,19 +61,25 @@ INPUTS PROVIDED:
 2. Human Feedback PDF Content: Marks awarded, human comments, and reported total score.
 
 TASK OBJECTIVES:
-A. Alignment Analysis: Compare student OCR with official key. Identify anatomical omissions or errors.
-B. Feedback Augmentation: Create a ONE LINE "AI Feedback Addition" per question clarifying missing anatomical details from the marking scheme.
-C. Generalised Synthesis: Professional academic summary of student's overall performance.
-D. Verification: Recalculate total marks from individual question scores and compare with the reported total in the human feedback.
+A. Alignment Analysis: Compare student OCR with official key. Identify anatomical omissions.
+B. Feedback Augmentation: Create a ONE LINE "AI Feedback Addition" per question clarifying missing anatomical details.
+C. Generalised Synthesis: Professional academic summary of overall performance.
+D. Verification: Recalculate marks and compare with reported total.
 
-OUTPUT FORMAT: Generate a valid JSON object matching the defined schema.
+OUTPUT FORMAT: Valid JSON.
 `;
 
 async function generateEvaluationReport(
   mergedFile: { name: string; data: string; mimeType: string },
   feedbackFile: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Ensure we use process.env.API_KEY directly as required
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key configuration is missing. Please check environment variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
@@ -148,7 +154,7 @@ async function generateEvaluationReport(
         },
         required: ["examReference", "evaluationType", "aiModelRole", "generalisedFeedback", "questionWiseFeedback", "scoreVerification", "finalizedFeedback", "actionSummary"]
       },
-      thinkingConfig: { thinkingBudget: 32768 }
+      thinkingConfig: { thinkingBudget: 4000 }
     }
   });
 
@@ -189,11 +195,12 @@ const FileUpload: React.FC<{
 
 const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
   <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-6 duration-700">
+    {/* Header Banner */}
     <div className="bg-blue-950 text-white rounded-2xl p-10 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
       <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
-          <div className="inline-flex items-center px-3 py-1 bg-blue-800 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-700 mb-4">Audit Verified</div>
+          <div className="inline-flex items-center px-3 py-1 bg-blue-800 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-700 mb-4">Verification Completed</div>
           <h2 className="text-3xl font-black tracking-tight">{report.examReference}</h2>
           <div className="flex items-center space-x-6 text-sm font-medium opacity-70">
             <span className="flex items-center"><svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>{report.evaluationType}</span>
@@ -201,17 +208,18 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Final Score</p>
+          <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Audit Score</p>
           <p className="text-5xl font-black tabular-nums">{report.scoreVerification.reportedTotal}<span className="text-xl opacity-40 ml-1">pts</span></p>
         </div>
       </div>
     </div>
 
+    {/* Synthesis Card */}
     <section className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
       <div className="bg-slate-50 border-b border-slate-100 px-8 py-4 flex items-center justify-between">
         <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center">
           <svg className="w-4 h-4 mr-2 text-blue-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-          Executive Summary
+          General Academic Synthesis
         </h3>
       </div>
       <div className="p-10 leading-relaxed text-slate-700 italic border-l-4 border-blue-900 m-8 bg-slate-50 shadow-inner">
@@ -219,10 +227,11 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
+    {/* Question Analysis */}
     <section className="space-y-6">
       <h3 className="text-xl font-black text-slate-900 px-2 flex items-center">
         <span className="bg-blue-900 text-white w-10 h-10 rounded-xl flex items-center justify-center mr-4 text-sm shadow-xl">1</span>
-        Alignment Analysis
+        Detailed Alignment Analysis
       </h3>
       <div className="overflow-x-auto rounded-3xl border border-slate-200 shadow-2xl bg-white">
         <table className="w-full text-left border-collapse min-w-[1200px]">
@@ -232,7 +241,7 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
               <th className="p-6 w-32 text-center">Marks</th>
               <th className="p-6">Requirements</th>
               <th className="p-6">Student Content</th>
-              <th className="p-6 bg-blue-50/50 text-blue-950 border-l-4 border-blue-900">AI Augmented Insight</th>
+              <th className="p-6 bg-blue-50/50 text-blue-950 border-l-4 border-blue-900">AI Augmented Observation</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -257,6 +266,7 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
+    {/* Verification Footer Cards */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <section className="bg-white rounded-3xl border border-slate-200 shadow-xl p-10">
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Score Integrity Check</h3>
@@ -278,7 +288,7 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       <section className="bg-slate-900 rounded-3xl p-10 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between">
         <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full -mr-24 -mt-24 blur-3xl"></div>
         <div className="relative z-10">
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] mb-8">System Observations</h4>
+          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] mb-8">AI Observation Patterns</h4>
           <div className="space-y-6">
             {report.finalizedFeedback.slice(0, 3).map((obs, i) => (
               <div key={i} className="flex space-x-4">
@@ -291,8 +301,8 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
             ))}
           </div>
         </div>
-        <div className="mt-10">
-          <button onClick={() => window.print()} className="px-6 py-3 bg-blue-700 hover:bg-blue-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Print Evaluation</button>
+        <div className="mt-10 flex space-x-4">
+          <button className="px-6 py-3 bg-blue-700 hover:bg-blue-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Download Audit PDF</button>
         </div>
       </section>
     </div>
@@ -309,16 +319,24 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Reveal application when component mounts
+    // Reveal app and remove loader when components ready
     const loader = document.getElementById('loader');
     if (loader) {
-      loader.style.opacity = '0';
-      setTimeout(() => loader.remove(), 500);
+      setTimeout(() => {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+      }, 800);
     }
   }, []);
 
   const handleProcess = async () => {
     if (!mergedFile || !feedbackFile) return setError("Analysis requires both PDF artifact files.");
+    
+    // Preliminary check for API key
+    if (!process.env.API_KEY) {
+      setError("AI Configuration missing: process.env.API_KEY is undefined.");
+      return;
+    }
 
     setStatus(ProcessingStatus.ANALYZING);
     setError(null);
@@ -336,7 +354,7 @@ const App: React.FC = () => {
       setStatus(ProcessingStatus.COMPLETED);
     } catch (e: any) {
       console.error(e);
-      setError("AI Analysis encountered an error. Please ensure files are valid medical PDFs.");
+      setError(e.message || "Evaluation failed during document extraction.");
       setStatus(ProcessingStatus.ERROR);
     }
   };
@@ -351,37 +369,39 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#fcfdfe] text-slate-900">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-6 h-20 flex items-center justify-between shadow-sm">
+      <nav className="bg-white border-b border-slate-200/60 sticky top-0 z-50 px-6 h-20 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 bg-blue-900 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl">🛡️</div>
           <div>
             <h1 className="text-xl font-black tracking-tight leading-none">AnatomyGuard</h1>
-            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1">AI Academic Evaluation</p>
+            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1">Medical Education Audit</p>
           </div>
         </div>
-        {report && <button onClick={reset} className="px-6 py-2.5 bg-slate-100 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all">New Scan</button>}
+        {report && <button onClick={reset} className="px-6 py-2.5 bg-slate-100 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all">New Evaluation</button>}
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 pt-12">
         {!report || status === ProcessingStatus.ANALYZING ? (
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
-               <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4">Academic Portal</h2>
-               <p className="text-slate-500 font-medium">Verify human evaluator alignment using grounded AI vision.</p>
+               <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4">Academic Evaluation Analysis</h2>
+               <p className="text-slate-500 font-medium">Upload primary references and human feedback to generate audit observations.</p>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden">
               <div className="bg-slate-50/80 px-10 py-8 border-b border-slate-100">
-                <h3 className="text-lg font-black text-slate-800">Artifact Intake</h3>
+                <h3 className="text-lg font-black text-slate-800">Document Upload</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Ensure high-resolution PDF for OCR accuracy</p>
               </div>
               <div className="p-10 space-y-10">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <FileUpload id="m" label="Primary Reference" description="Paper + Key + Answers" onChange={setMergedFile} fileName={mergedFile?.name || null} />
-                  <FileUpload id="f" label="Evaluation Feedback" description="Human Marks + Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
+                  <FileUpload id="m" label="Reference PDF" description="Question + Key + Answers" onChange={setMergedFile} fileName={mergedFile?.name || null} />
+                  <FileUpload id="f" label="Human Feedback" description="Marks + Evaluator Comments" onChange={setFeedbackFile} fileName={feedbackFile?.name || null} />
                 </div>
 
                 {error && (
                   <div className="p-5 bg-rose-50 border border-rose-100 text-rose-700 text-sm rounded-2xl flex items-start space-x-3">
+                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     <p className="font-semibold">{error}</p>
                   </div>
                 )}
@@ -389,7 +409,7 @@ const App: React.FC = () => {
                 <button 
                   onClick={handleProcess} 
                   disabled={status === ProcessingStatus.ANALYZING || !mergedFile || !feedbackFile} 
-                  className="w-full py-5 bg-blue-900 text-white rounded-2xl font-black text-xl shadow-2xl hover:bg-blue-950 disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center space-x-4"
+                  className="w-full py-5 bg-blue-900 text-white rounded-2xl font-black text-xl shadow-2xl hover:bg-blue-950 disabled:opacity-50 transition-all active:scale-[0.98] group flex items-center justify-center space-x-4"
                 >
                   {status === ProcessingStatus.ANALYZING ? (
                     <>
@@ -397,7 +417,10 @@ const App: React.FC = () => {
                       <span>Analyzing Medical Records...</span>
                     </>
                   ) : (
-                    <span>Initiate AI Evaluation</span>
+                    <>
+                      <span>Generate AI-Augmented Report</span>
+                      <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                    </>
                   )}
                 </button>
               </div>
@@ -408,7 +431,10 @@ const App: React.FC = () => {
       </main>
 
       <style>{`
-        @keyframes progress { 0% { left: -40%; } 100% { left: 100%; } }
+        @keyframes progress {
+          0% { left: -40%; }
+          100% { left: 100%; }
+        }
       `}</style>
     </div>
   );
@@ -416,5 +442,5 @@ const App: React.FC = () => {
 
 // --- RENDER ---
 
-const root = createRoot(document.getElementById('root')!);
+const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);
