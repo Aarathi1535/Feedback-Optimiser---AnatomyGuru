@@ -1,4 +1,4 @@
-// Shared types for the medical academic evaluation assistant
+
 export enum ProcessingStatus {
   IDLE = 'IDLE',
   ANALYZING = 'ANALYZING',
@@ -23,12 +23,13 @@ export interface ScoreVerification {
   discrepancyExplanation?: string;
 }
 
-export interface AIObservation {
+// Added missing interfaces for ReportDisplay component
+export interface FinalizedObservation {
   section: string;
   observation: string;
 }
 
-export interface ActionSummary {
+export interface ActionAction {
   task: string;
   status: string;
   evidence: string;
@@ -38,9 +39,10 @@ export interface EvaluationReport {
   examReference: string;
   evaluationType: string;
   aiModelRole: string;
-  generalisedFeedback: string;
+  elaboratedGeneralisedFeedback: string;
   questionWiseFeedback: QuestionFeedback[];
   scoreVerification: ScoreVerification;
-  finalizedFeedback: AIObservation[];
-  actionSummary: ActionSummary[];
+  // Added missing fields to resolve type errors in ReportDisplay.tsx
+  finalizedFeedback: FinalizedObservation[];
+  actionSummary: ActionAction[];
 }
