@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 
 // --- TYPES & INTERFACES ---
@@ -73,7 +73,6 @@ async function generateEvaluationReport(
   mergedFile: { name: string; data: string; mimeType: string },
   feedbackFile: { name: string; data: string; mimeType: string }
 ): Promise<EvaluationReport> {
-  // Direct use of process.env.API_KEY as per requirements
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const response = await ai.models.generateContent({
@@ -190,7 +189,6 @@ const FileUpload: React.FC<{
 
 const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
   <div className="w-full space-y-12 pb-24 animate-in fade-in slide-in-from-bottom-6 duration-700">
-    {/* Header Banner */}
     <div className="bg-blue-950 text-white rounded-2xl p-10 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
       <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -209,7 +207,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </div>
 
-    {/* Synthesis Card */}
     <section className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
       <div className="bg-slate-50 border-b border-slate-100 px-8 py-4 flex items-center justify-between">
         <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center">
@@ -222,7 +219,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Question Analysis */}
     <section className="space-y-6">
       <h3 className="text-xl font-black text-slate-900 px-2 flex items-center">
         <span className="bg-blue-900 text-white w-10 h-10 rounded-xl flex items-center justify-center mr-4 text-sm shadow-xl">1</span>
@@ -261,7 +257,6 @@ const ReportDisplay: React.FC<{ report: EvaluationReport }> = ({ report }) => (
       </div>
     </section>
 
-    {/* Verification Footer Cards */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <section className="bg-white rounded-3xl border border-slate-200 shadow-xl p-10">
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Score Integrity Check</h3>
@@ -314,12 +309,11 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Reveal application when component mounts
     const loader = document.getElementById('loader');
     if (loader) {
-      setTimeout(() => {
-        loader.style.opacity = '0';
-        setTimeout(() => loader.remove(), 500);
-      }, 500);
+      loader.style.opacity = '0';
+      setTimeout(() => loader.remove(), 500);
     }
   }, []);
 
@@ -422,5 +416,5 @@ const App: React.FC = () => {
 
 // --- RENDER ---
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
+const root = createRoot(document.getElementById('root')!);
 root.render(<App />);

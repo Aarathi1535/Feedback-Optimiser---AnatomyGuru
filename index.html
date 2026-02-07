@@ -47,6 +47,7 @@
 
   <div id="root"></div>
   
-  <script type="text/babel" data-presets="react,typescript" src="./index.tsx"></script>
+  <!-- Added data-type="module" to enable ESM support in Babel Standalone -->
+  <script type="text/babel" data-type="module" data-presets="react,typescript" src="./index.tsx"></script>
 </body>
 </html>
